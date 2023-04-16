@@ -48,7 +48,10 @@ class EventDeployerJobs:
                            "asset_symbol": asset
                            }
                 )
-
+                print(
+                    f"Found {len(list(completed_to_be_updated_event_records))} {asset} {params['collection_name']} "
+                    f"completed events to be updated... "
+                )
                 for event_info in completed_to_be_updated_event_records:
                     event_status = cls.check_contract_status(provider_handler=provider_handler,
                                                              contract_address=event_info["contract_address"],
