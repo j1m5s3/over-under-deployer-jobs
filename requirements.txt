@@ -1,0 +1,7 @@
+pymongo
+python-dotenv
+pydantic
+py-solc-x
+web3
+cmake
+retrying
