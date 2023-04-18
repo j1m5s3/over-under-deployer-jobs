@@ -28,8 +28,8 @@ class EventDeployerJobs:
                         pass
                     else:
                         raise Exception("Invalid job type")
-                    print("Job runner sleeping for 6 hrs...")
-                    time.sleep(86400 / 4)
+                print("Job runner sleeping for 2 hrs...")
+                time.sleep(86400 / 12)
             except Exception as e:
                 print(e)
                 run_indefinitely = False
@@ -49,7 +49,7 @@ class EventDeployerJobs:
                            }
                 )
                 print(
-                    f"Found {len(list(completed_to_be_updated_event_records))} {asset} {params['collection_name']} "
+                    f"Found {len(list(completed_to_be_updated_event_records.clone()))} {asset} {params['collection_name']} "
                     f"completed events to be updated... "
                 )
                 for event_info in completed_to_be_updated_event_records:
@@ -57,7 +57,6 @@ class EventDeployerJobs:
                                                              contract_address=event_info["contract_address"],
                                                              contract_abi=event_info["contract_abi"],
                                                              collection_name=params["collection_name"])
-
                     if event_status["is_event_over"]:
                         current_contract_address = event_status["contract_address"]
                         record_updated = cls.update_event_record(mongo_handler=mongo_handler,
@@ -93,7 +92,7 @@ class EventDeployerJobs:
                            }
                 )
 
-                if len(list(ongoing_event_records)) == 0:
+                if len(list(ongoing_event_records.clone())) == 0:
                     print("No {} {} events ongoing...".format(params["collection_name"], asset))
                     print("Deploying new contract...")
                     deployed_contract_interface = cls.deploy_events(provider_handler=provider_handler,
@@ -108,9 +107,9 @@ class EventDeployerJobs:
                                                                   document=contract_info_record_data.dict())
 
                         if contracts_response.acknowledged:
-                            print("Event contract record created")
+                            print(f"Event {asset} {params['collection_name']} record created")
                     else:
-                        raise Exception("Failed to deploy event contract")
+                        raise Exception(f"Failed to deploy {params['collection_name']} contract")
 
             except Exception as e:
                 print(f"An error occurred while processing betting events: {str(e)}")

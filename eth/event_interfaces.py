@@ -1,10 +1,8 @@
-import json
-import datetime
-from typing import List, Optional, Dict
+from typing import Optional, Dict
 import os
 from web3 import Web3
 from retrying import retry
-from solcx import compile_files, compile_source, install_solc, set_solc_version, compile_solc
+from solcx import compile_files, install_solc
 
 from .provider.provider import Provider
 
