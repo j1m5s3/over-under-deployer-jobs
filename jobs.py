@@ -68,8 +68,7 @@ class EventDeployerJobs:
                             deployed_contract_interface = cls.deploy_events(provider_handler=provider_handler,
                                                                             mongo_handler=mongo_handler,
                                                                             asset_symbol=asset,
-                                                                            collection_name=params[
-                                                                                "collection_name"])
+                                                                            collection_name=params["collection_name"])
                             if deployed_contract_interface is not None:
                                 contract_info = deployed_contract_interface.get_event_contract_info()
                                 contract_info_record_data = ContractInfoModel(**contract_info)
