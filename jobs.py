@@ -14,30 +14,42 @@ class EventDeployerJobs:
         self.provider_handler = provider_handler
         self.mongo_handler = mongo_handler
 
-    def job_runner(self, run_indefinitely=True):
+    def job_runner(self, is_test, run_indefinitely=True):
         while run_indefinitely:
             try:
-                for job in self.job_configs:
-                    if job["job_type"] == "betting_event_6h":
-                        self.deploy_event_job(job_config=job,
-                                              provider_handler=self.provider_handler,
-                                              mongo_handler=self.mongo_handler)
-                    elif job["job_type"] == "betting_event_12h":
-                        pass
-                    elif job["job_type"] == "betting_event_24h":
-                        pass
-                    else:
-                        raise Exception("Invalid job type")
-                print("Job runner sleeping for 2 hrs...")
-                time.sleep(86400 / 12)
+                if not is_test:
+                    for job in self.job_configs:
+                        if job["job_type"] == "betting_event_6h":
+                            self.deploy_event_job(job_config=job,
+                                                  provider_handler=self.provider_handler,
+                                                  mongo_handler=self.mongo_handler)
+                        elif job["job_type"] == "betting_event_12h":
+                            pass
+                        elif job["job_type"] == "betting_event_24h":
+                            pass
+
+                elif is_test:
+                    for job in self.job_configs:
+                        if job['job_type'] == 'betting_event_test':
+                            self.deploy_event_job(job_config=job,
+                                                  provider_handler=self.provider_handler,
+                                                  mongo_handler=self.mongo_handler,
+                                                  is_test=is_test)
+                            run_indefinitely = False
+
             except Exception as e:
                 print(e)
+                print("Error in job runner...")
+                print("Exiting job runner...")
                 run_indefinitely = False
 
+            if run_indefinitely:
+                print("Job runner sleeping for 2 hrs...")
+                time.sleep(86400 / 12)
         return
 
     @classmethod
-    def deploy_event_job(cls, job_config, provider_handler, mongo_handler):
+    def deploy_event_job(cls, job_config, provider_handler, mongo_handler, is_test=False):
         for asset in job_config["params"].keys():
             try:
                 params = job_config['params'][asset]
@@ -68,7 +80,8 @@ class EventDeployerJobs:
                             deployed_contract_interface = cls.deploy_events(provider_handler=provider_handler,
                                                                             mongo_handler=mongo_handler,
                                                                             asset_symbol=asset,
-                                                                            collection_name=params["collection_name"])
+                                                                            collection_name=params["collection_name"],
+                                                                            is_test=is_test)
                             if deployed_contract_interface is not None:
                                 contract_info = deployed_contract_interface.get_event_contract_info()
                                 contract_info_record_data = ContractInfoModel(**contract_info)
@@ -97,7 +110,9 @@ class EventDeployerJobs:
                     deployed_contract_interface = cls.deploy_events(provider_handler=provider_handler,
                                                                     mongo_handler=mongo_handler,
                                                                     asset_symbol=asset,
-                                                                    collection_name=params["collection_name"])
+                                                                    collection_name=params["collection_name"],
+                                                                    is_test=is_test)
+
                     if deployed_contract_interface is not None:
                         contract_info = deployed_contract_interface.get_event_contract_info()
                         contract_info_record_data = ContractInfoModel(**contract_info)
@@ -112,12 +127,22 @@ class EventDeployerJobs:
 
             except Exception as e:
                 print(f"An error occurred while processing betting events: {str(e)}")
-                return
+                raise e
+        return
 
     @classmethod
-    def deploy_event(cls, provider_handler, mongo_handler, asset_symbol: str, hr_duration) -> Optional[EventDeployer]:
-        event_deployer = EventDeployer(provider=provider_handler, hr_duration=hr_duration)
+    def deploy_event(cls,
+                     provider_handler,
+                     mongo_handler,
+                     asset_symbol: str,
+                     hr_duration,
+                     is_test: bool) -> Optional[EventDeployer]:
+
+        event_deployer = EventDeployer(provider=provider_handler,
+                                       hr_duration=hr_duration,
+                                       is_test=is_test)
         price_mark = None
+
         if asset_symbol == "BTC":
             mongo_response = mongo_handler.find_one_sorted(collection='btc_live_price',
                                                            query=[("timestamp", -1)])
@@ -141,21 +166,37 @@ class EventDeployerJobs:
 
     @classmethod
     def deploy_events(cls, provider_handler, mongo_handler,
-                      asset_symbol: str, collection_name: str) -> Optional[EventContractInterface]:
+                      asset_symbol: str, collection_name: str, is_test: bool) -> Optional[EventContractInterface]:
         asset_symbol = asset_symbol.upper()
         event_deployer = None
 
         if collection_name == "event_contracts_6h":
             event_deployer = cls.deploy_event(provider_handler=provider_handler,
-                                              mongo_handler=mongo_handler, asset_symbol=asset_symbol, hr_duration=6)
+                                              mongo_handler=mongo_handler,
+                                              asset_symbol=asset_symbol,
+                                              hr_duration=6,
+                                              is_test=is_test)
 
         if collection_name == "event_contracts_12h":
             event_deployer = cls.deploy_event(provider_handler=provider_handler,
-                                              mongo_handler=mongo_handler, asset_symbol=asset_symbol, hr_duration=12)
+                                              mongo_handler=mongo_handler,
+                                              asset_symbol=asset_symbol,
+                                              hr_duration=12,
+                                              is_test=is_test)
 
         if collection_name == "event_contracts_24h":
             event_deployer = cls.deploy_event(provider_handler=provider_handler,
-                                              mongo_handler=mongo_handler, asset_symbol=asset_symbol, hr_duration=24)
+                                              mongo_handler=mongo_handler,
+                                              asset_symbol=asset_symbol,
+                                              hr_duration=24,
+                                              is_test=is_test)
+
+        if collection_name == "event_contracts_test":
+            event_deployer = cls.deploy_event(provider_handler=provider_handler,
+                                              mongo_handler=mongo_handler,
+                                              asset_symbol=asset_symbol,
+                                              hr_duration=0,
+                                              is_test=is_test)
 
         if event_deployer is not None:
             event_interface = EventContractInterface(provider=provider_handler,
@@ -188,11 +229,10 @@ class EventDeployerJobs:
                                              query={"contract_address": current_contract_address},
                                              document={"$set": update_record.dict()})
 
-        asset_symbol = current_contract_info['asset_symbol']
         if update_result.acknowledged:
-            print(f"Event {collection_name} {asset_symbol} record updated")
+            print(f"Event {collection_name} {current_contract_info['asset_symbol']} record updated")
         else:
-            print(f"Event {collection_name} {asset_symbol} record update failed")
+            print(f"Event {collection_name} {current_contract_info['asset_symbol']} record update failed")
             raise Exception("Event record update failed")
 
         return update_result.acknowledged

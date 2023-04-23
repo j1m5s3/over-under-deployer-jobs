@@ -7,8 +7,6 @@ contract OverUnderSixHour {
     uint256 private constant EVENT_DURATION = 6 hours;
     // Duration the event will allow betting after contract deployment
     uint256 private constant BETTING_PERIOD = 6 hours;
-    // Duration before payouts are automatically sent to winners
-    uint256 private constant PAYOUT_PERIOD = 72 hours;
     // Min bet value
     uint256 public constant MIN_BET_AMOUNT = 0.001 ether;
     // Betting fee currently at 0.001 ether
@@ -16,20 +14,12 @@ contract OverUnderSixHour {
     // BETTING FEE + MIN_BET_AMOUNT
     uint256 public constant BET_PLUS_FEE = MIN_BET_AMOUNT + BETTING_FEE;
 
-    struct Bet {
-        uint256 betBalance; // initialize to 0
-        uint256 withdrawBalance; // initialize to 0
-        bool payoutComplete; // initialize to false
-    }
-    mapping(address => Bet) underBets;
-    mapping(address => Bet) overBets;
-
     //new players betting over the _priceMark
     address[] public overBetters;
+    mapping(address => uint256) overBets;
     //new players betting under the _priceMark
     address[] public underBetters;
-    // addresses of winners
-    address[] public winningBetters;
+    mapping(address => uint256) underBets;
 
     //balance of overBetters pool
     uint256 public overBettersBalance = 0 ether;
@@ -39,17 +29,16 @@ contract OverUnderSixHour {
     uint256 public feePoolBalance = 0 ether;
 
     // Modifiers will be based on the betting balances starts as x2
-    uint256 public overBettingPayoutModifier = 2000000000000000000;
-    uint256 public underBettingPayoutModifier = 2000000000000000000;
+    uint256 public overBettingPayoutModifier = 2;
+    uint256 public underBettingPayoutModifier = 2;
 
-    // manager is in charge of the contract (creator)
+    //manager is in charge of the contract (creator)
     address public immutable manager;
 
     //
     uint256 public immutable priceMark;
     uint256 public immutable bettingClose;
     uint256 public immutable eventClose;
-    uint256 public immutable payoutClose;
 
     // ETH, BTC only at the moment
     string public assetSymbol;
@@ -57,6 +46,8 @@ contract OverUnderSixHour {
     // Price of asset at the end of the event
     uint256 public priceAtClose;
 
+    // Flag that indicates if winners have received their payout
+    bool public payoutComplete = false;
 
     /*
         Input values to the contract
@@ -69,7 +60,6 @@ contract OverUnderSixHour {
         priceMark = _priceMark;
         bettingClose = block.timestamp + BETTING_PERIOD;
         eventClose = bettingClose + EVENT_DURATION;
-        payoutClose = eventClose + PAYOUT_PERIOD;
     }
 
     // Get Contract Name
@@ -99,12 +89,14 @@ contract OverUnderSixHour {
 
     // Get under betting payout modifier value
     function getUnderBettingPayoutModifier() public view returns (uint256) {
-        return underBettingPayoutModifier;
+        uint256 fullModifier = underBettingPayoutModifier * 10**18;
+        return fullModifier;
     }
 
     // Get over betting payout modifier value
     function getOverBettingPayoutModifier() public view returns (uint256) {
-        return overBettingPayoutModifier;
+        uint256 fullModifier = overBettingPayoutModifier * 10**18;
+        return fullModifier;
     }
 
     // Get betting fee value
@@ -146,9 +138,32 @@ contract OverUnderSixHour {
         }
     }
 
-    function setPriceAtClose(uint256 _price) public restricted {
-        require(block.timestamp > eventClose);
-        priceAtClose = _price * 1 ether;
+    /*
+        Check if user is in the opposite pool they are trying to bet in. Prevent manipulation
+        @param (address): userAddress: msg.sender of either betUnder or betOver functions
+        @param (bool): isOverBetter: determines which address array is checked against
+        @returns: bool
+    */
+    function checkUserInOtherPool(address userAddress, bool isOverBetter)
+        private
+        view
+        returns (bool)
+    {
+        if (isOverBetter) {
+            for (uint256 i = 0; i < underBetters.length; i++) {
+                if (underBetters[i] == userAddress) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            for (uint256 i = 0; i < overBetters.length; i++) {
+                if (overBetters[i] == userAddress) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     // Check if user in pool
@@ -178,30 +193,29 @@ contract OverUnderSixHour {
     function betUnder() public payable balanceRestriction {
         require(block.timestamp < bettingClose);
 
-        uint256 betValue;
+        bool userInOtherPool;
         bool userInPool;
-
+        uint256 betValue;
+        // players can only join one pool per event (Over or Under)
+        userInOtherPool = checkUserInOtherPool(msg.sender, false);
+        userInPool = checkUserInPool(msg.sender, false);
+        require(userInOtherPool != true, "You have already bet over");
         // players must make a min bet of 0.001 ETH + 0.0001 ETH fee
         require(
             msg.value > BET_PLUS_FEE,
             "Must make a minimum bet of 0.001 ETH + 0.0001 ETH fee"
         );
-
-        userInPool = checkUserInPool(msg.sender, false);
+        // add player to underBetters pool
         if (!userInPool) {
-            // add player to underBetters pool
             underBetters.push(msg.sender);
-            underBets[msg.sender] = Bet(0, 0, false); // Initialize new Bet
         }
 
         // Value of bet after fee
         betValue = msg.value - BETTING_FEE;
         // add to underBettersBalance
-        underBettersBalance += betValue * 1 ether;
+        underBettersBalance += betValue;
         // map under bet to address
-        underBets[msg.sender].betBalance += betValue * 1 ether;
-        // the value of the bet is multiplied by the value of the payout modifier at the time of bet
-        underBets[msg.sender].withdrawBalance += (betValue * underBettingPayoutModifier) * 1 ether;
+        underBets[msg.sender] += betValue;
         // add fee to fee pool balance
         feePoolBalance += BETTING_FEE;
         // calculate payout modifier for under bet payouts
@@ -217,29 +231,28 @@ contract OverUnderSixHour {
     function betOver() public payable balanceRestriction {
         require(block.timestamp < bettingClose);
 
-        uint256 betValue;
+        bool userInOtherPool;
         bool userInPool;
-
+        uint256 betValue;
+        // players can only join one pool per event (Over or Under)
+        userInOtherPool = checkUserInOtherPool(msg.sender, true);
+        require(userInOtherPool != true, "You have already bet under");
         // players must make a min bet of 0.001 ETH + 0.0001 ETH fee
         require(
             msg.value > BET_PLUS_FEE,
             "Must make a minimum bet of 0.001 ETH + 0.0001 ETH fee"
         );
-
-        userInPool = checkUserInPool(msg.sender, true);
+        // add player to overBetters pool
         if (!userInPool) {
             overBetters.push(msg.sender);
-            overBets[msg.sender] = Bet(0, 0, false); // Initialize new Bet
         }
 
         // Value of bet after fee
         betValue = msg.value - BETTING_FEE;
         // add to overBettersBalance
-        overBettersBalance += betValue * 1 ether;
+        overBettersBalance += betValue;
         // map over bet to address
-        overBets[msg.sender].betBalance += betValue * 1 ether;
-        // the value of the bet is multiplied by the value of the payout modifier at the time of bet
-        overBets[msg.sender].withdrawBalance += (betValue * overBettingPayoutModifier) * 1 ether;
+        overBets[msg.sender] += betValue;
         // add fee to fee pool balance
         feePoolBalance += BETTING_FEE;
         // calculate payout modifier for over bet payouts
@@ -252,60 +265,63 @@ contract OverUnderSixHour {
 
     }
 
-    function populateWinners(address[] memory winningAdresses) private {
-        for (uint256 i = 0; i < winningAdresses.length; i++) {
-            winningBetters.push(winningAdresses[i]);
-        }
+    // Transfer betting fee to custodial wallet
+    function sendFee() public restricted {
+        payable(manager).transfer(BETTING_FEE);
     }
 
-    // Function to be called via python process
-    function setWinners() public restricted {
+    // Pay winners of event
+    function payWinners() public restricted {
         require(block.timestamp > eventClose);
+
         if (priceAtClose > priceMark) {
-            populateWinners(overBetters);
+            payOverBetters();
         }
         if (priceAtClose < priceMark) {
-            populateWinners(underBetters);
+            payUnderBetters();
         }
     }
 
-    // Function to be called by winning betters.
-    // Will block any betters that are not in winningBetters array
-    function winnerWithdrawFunds() public withdrawRestriction(winningBetters) {
+    // Payout over betters
+    function payOverBetters() private restricted {
+        require(priceAtClose > priceMark);
 
-        if (priceAtClose > priceMark) {
-            require(overBets[msg.sender].payoutComplete == false);
-            payable(msg.sender).transfer(overBets[msg.sender].withdrawBalance);
-            overBets[msg.sender].payoutComplete = true;
+        address winnerAddress;
+        uint256 winnerBetValue;
+        uint256 payoutValue;
+
+        for (uint256 i = 0; i < overBetters.length; i++) {
+            winnerAddress = overBetters[i];
+            winnerBetValue = overBets[winnerAddress];
+            payoutValue = winnerBetValue * overBettingPayoutModifier;
+            payable(winnerAddress).transfer(payoutValue);
         }
-        if (priceAtClose < priceMark) {
-            require(underBets[msg.sender].payoutComplete == false);
-            payable(msg.sender).transfer(underBets[msg.sender].withdrawBalance);
-            underBets[msg.sender].payoutComplete = true;
+    }
+
+    // Payout to under betters
+    function payUnderBetters() private restricted {
+        require(priceAtClose < priceMark);
+
+        address winnerAddress;
+        uint256 winnerBetValue;
+        uint256 payoutValue;
+
+        for (uint256 i = 0; i < underBetters.length; i++) {
+            winnerAddress = underBetters[i];
+            winnerBetValue = underBets[winnerAddress];
+            payoutValue = winnerBetValue * underBettingPayoutModifier;
+            payable(winnerAddress).transfer(payoutValue);
         }
     }
 
     // Destroy contract
     function destroyContract() public restricted {
-        require(block.timestamp > payoutClose, "Event has not finished");
+        require(block.timestamp > eventClose, "Event has not finished");
+        require(payoutComplete == true, "Payout has not been made");
 
         address payable managerAddress = payable(manager);
 
-        // Destroy contract and transfer winnings to remaining betters that have not withdrawn
-        // TODO: Apply penalty to betters that have not withdrawn
-        for(uint256 i = 0; i < winningBetters.length; i++) {
-            if (priceAtClose > priceMark) {
-                if (overBets[winningBetters[i]].payoutComplete == false) {
-                    payable(winningBetters[i]).transfer(overBets[winningBetters[i]].withdrawBalance);
-                }
-            }
-            if (priceAtClose < priceMark) {
-                if (underBets[winningBetters[i]].payoutComplete == false) {
-                    payable(winningBetters[i]).transfer(underBets[winningBetters[i]].withdrawBalance);
-                }
-            }
-        }
-
+        // Destroy contract and transfer remaining ETH to manager
         selfdestruct(managerAddress);
     }
 
@@ -318,17 +334,4 @@ contract OverUnderSixHour {
         require(msg.sender.balance > BET_PLUS_FEE);
         _;
     }
-
-    modifier withdrawRestriction(address[] memory allowedAddresses) {
-        bool allowed = false;
-        for (uint256 i = 0; i < allowedAddresses.length; i++) {
-            if (allowedAddresses[i] == msg.sender) {
-                allowed = true;
-                break;
-            }
-        }
-        require(allowed, "Access denied");
-        _;
-    }
-
 }

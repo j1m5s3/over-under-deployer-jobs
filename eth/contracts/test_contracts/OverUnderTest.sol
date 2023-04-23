@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-contract OverUnderSixHour {
-    string public constant NAME = "OverUnder6Hour";
+contract OverUnderTest {
+    string public constant NAME = "OverUnderTest";
     // Duration the event will staty active after BETTING_PERIOD ends
-    uint256 private constant EVENT_DURATION = 6 hours;
+    uint256 private constant EVENT_DURATION = 20 minutes;
     // Duration the event will allow betting after contract deployment
-    uint256 private constant BETTING_PERIOD = 6 hours;
+    uint256 private constant BETTING_PERIOD = 20 minutes;
+    // Duration before payouts are automatically sent to winners
+    uint256 private constant PAYOUT_PERIOD = 0 hours;
     // Min bet value
     uint256 public constant MIN_BET_AMOUNT = 0.001 ether;
     // Betting fee currently at 0.001 ether
@@ -47,6 +49,7 @@ contract OverUnderSixHour {
     uint256 public immutable priceMark;
     uint256 public immutable bettingClose;
     uint256 public immutable eventClose;
+    uint256 public immutable payoutClose;
 
     // ETH, BTC only at the moment
     string public assetSymbol;
@@ -54,8 +57,6 @@ contract OverUnderSixHour {
     // Price of asset at the end of the event
     uint256 public priceAtClose;
 
-    // Flag that indicates if winners have received their payout
-    bool public payoutComplete = false;
 
     /*
         Input values to the contract
@@ -68,6 +69,7 @@ contract OverUnderSixHour {
         priceMark = _priceMark;
         bettingClose = block.timestamp + BETTING_PERIOD;
         eventClose = bettingClose + EVENT_DURATION;
+        payoutClose = eventClose + PAYOUT_PERIOD;
     }
 
     // Get Contract Name
@@ -133,6 +135,11 @@ contract OverUnderSixHour {
     // Get under betters addresses
     function getUnderBettersAddresses() public view returns (address[] memory) {
         return underBetters;
+    }
+
+    // Get winning betters addresses
+    function getWinningBettersAddresses() public view returns (address[] memory) {
+        return winningBetters;
     }
 
     // Check if event is over
@@ -257,7 +264,7 @@ contract OverUnderSixHour {
     }
 
     // Function to be called via python process
-    function callPopulateWinners() public restricted {
+    function setWinners() public restricted {
         require(block.timestamp > eventClose);
         if (priceAtClose > priceMark) {
             populateWinners(overBetters);
@@ -285,12 +292,25 @@ contract OverUnderSixHour {
 
     // Destroy contract
     function destroyContract() public restricted {
-        require(block.timestamp > eventClose, "Event has not finished");
-        require(payoutComplete == true, "Payout has not been made");
+        require(block.timestamp > payoutClose, "Event has not finished");
 
         address payable managerAddress = payable(manager);
 
-        // Destroy contract and transfer remaining ETH to manager
+        // Destroy contract and transfer winnings to remaining betters that have not withdrawn
+        // TODO: Apply penalty to betters that have not withdrawn
+        for(uint256 i = 0; i < winningBetters.length; i++) {
+            if (priceAtClose > priceMark) {
+                if (overBets[winningBetters[i]].payoutComplete == false) {
+                    payable(winningBetters[i]).transfer(overBets[winningBetters[i]].withdrawBalance);
+                }
+            }
+            if (priceAtClose < priceMark) {
+                if (underBets[winningBetters[i]].payoutComplete == false) {
+                    payable(winningBetters[i]).transfer(underBets[winningBetters[i]].withdrawBalance);
+                }
+            }
+        }
+
         selfdestruct(managerAddress);
     }
 

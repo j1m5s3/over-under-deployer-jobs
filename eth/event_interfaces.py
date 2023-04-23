@@ -10,18 +10,25 @@ install_solc(version='latest')
 
 
 class EventDeployer:
-    def __init__(self, provider: Provider, hr_duration=6):
+    def __init__(self, provider: Provider, hr_duration=6, is_test=False):
         self.provider = provider
-
-        if hr_duration == 6:
-            self.contract_source_path = os.path.join(os.path.dirname(__file__), "contracts/OverUnderSixHour.sol")
-            self.event_contract_name = ":OverUnderSixHour"
-        elif hr_duration == 12:
-            self.contract_source_path = os.path.join(os.path.dirname(__file__), "contracts/OverUnderTwelveHour.sol")
-            self.event_contract_name = ":OverUnderTwelveHour"
-        elif hr_duration == 24:
-            self.contract_source_path = os.path.join(os.path.dirname(__file__), "contracts/OverUnderTwentyFourHour.sol")
-            self.event_contract_name = ":OverUnderTwentyFourHour"
+        if is_test:
+            self.contract_source_path = os.path.join(os.path.dirname(__file__),
+                                                     "contracts/test_contracts/OverUnderTest.sol")
+            self.event_contract_name = ":OverUnderTest"
+        else:
+            if hr_duration == 6:
+                self.contract_source_path = os.path.join(os.path.dirname(__file__),
+                                                         "contracts/OverUnderSixHour.sol")
+                self.event_contract_name = ":OverUnderSixHour"
+            elif hr_duration == 12:
+                self.contract_source_path = os.path.join(os.path.dirname(__file__),
+                                                         "contracts/OverUnderTwelveHour.sol")
+                self.event_contract_name = ":OverUnderTwelveHour"
+            elif hr_duration == 24:
+                self.contract_source_path = os.path.join(os.path.dirname(__file__),
+                                                         "contracts/OverUnderTwentyFourHour.sol")
+                self.event_contract_name = ":OverUnderTwentyFourHour"
 
         self.w3_contract_handle = None
         self.contract_address = None
@@ -32,8 +39,6 @@ class EventDeployer:
         """
         :param asset_symbol:
         :param price_mark:
-        :param contract_source_path:
-        :param contract_modifiers:
         :return:
         """
         constructor_args = {
@@ -61,8 +66,7 @@ class EventDeployer:
     def compile_contract(self, contract_source_path) -> Optional[Dict]:
         """
         Compile solidity contract and modify based on contract_modifiers
-        :param contract_source_path:
-        :param contract_modifiers:
+        :param contract_source_path: path to contract source file
         :return:
         """
         contract_id = None
@@ -118,46 +122,29 @@ class EventContractInterface:
         self.w3_contract_handle = self.provider.w3.eth.contract(address=contract_address, abi=contract_abi)
         if self.w3_contract_handle is None:
             raise Exception("Contract not found")
-        else:
-            self.contract_name = self.w3_contract_handle.functions.getContractName().call()
-            self.contract_address = self.w3_contract_handle.address
-            self.contract_abi = self.w3_contract_handle.abi
-            self.price_mark = Web3.from_wei(self.w3_contract_handle.functions.getPriceMark().call(), 'ether')
-            self.asset_symbol = self.w3_contract_handle.functions.getAssetSymbol().call()
-            self.betting_close = self.w3_contract_handle.functions.getBettingClose().call()
-            self.event_close = self.w3_contract_handle.functions.getEventClose().call()
-
-            self.contract_balance = Web3.from_wei(self.w3_contract_handle.functions.getContractBalance().call(),
-                                                  'ether')
-            self.over_betters_balance = Web3.from_wei(self.w3_contract_handle.functions.getOverBettersBalance().call(),
-                                                      'ether')
-            self.under_betters_balance = Web3.from_wei(
-                self.w3_contract_handle.functions.getUnderBettersBalance().call(), 'ether'
-            )
-            self.over_betting_payout_modifier = self.w3_contract_handle.functions.getOverBettingPayoutModifier().call()
-            self.under_betting_payout_modifier = self.w3_contract_handle.functions.getUnderBettingPayoutModifier().call()
-            self.over_betters_addresses = self.w3_contract_handle.functions.getOverBettersAddresses().call()
-            self.under_betters_addresses = self.w3_contract_handle.functions.getUnderBettersAddresses().call()
-            self.is_event_over = self.w3_contract_handle.functions.isEventOver().call()
 
     def get_event_contract_info(self) -> Optional[Dict]:
 
         contract_info = {
-            "contract_name": self.contract_name,
-            "contract_address": self.contract_address,
-            "contract_abi": self.contract_abi,
-            "price_mark": self.price_mark,
-            "asset_symbol": self.asset_symbol,
-            "betting_close": self.betting_close,
-            "event_close": self.event_close,
-            "contract_balance": self.contract_balance,
-            "over_betters_balance": self.over_betters_balance,
-            "under_betters_balance": self.under_betters_balance,
-            "over_betting_payout_modifier": self.over_betting_payout_modifier,
-            "under_betting_payout_modifier": self.under_betting_payout_modifier,
-            "over_betters_addresses": self.over_betters_addresses,
-            "under_betters_addresses": self.under_betters_addresses,
-            "is_event_over": self.is_event_over
+            "contract_name": self.w3_contract_handle.functions.getContractName().call(),
+            "contract_address": self.w3_contract_handle.address,
+            "contract_abi": self.w3_contract_handle.abi,
+            "price_mark": Web3.from_wei(self.w3_contract_handle.functions.getPriceMark().call(), 'ether'),
+            "asset_symbol": self.w3_contract_handle.functions.getAssetSymbol().call(),
+            "betting_close": self.w3_contract_handle.functions.getBettingClose().call(),
+            "event_close": self.w3_contract_handle.functions.getEventClose().call(),
+
+            "contract_balance": Web3.from_wei(self.w3_contract_handle.functions.getContractBalance().call(),
+                                                  'ether'),
+            "over_betters_balance": Web3.from_wei(self.w3_contract_handle.functions.getOverBettersBalance().call(),
+                                                      'ether'),
+            "under_betters_balance": Web3.from_wei(
+                self.w3_contract_handle.functions.getUnderBettersBalance().call(), 'ether'),
+            "over_betting_payout_modifier": self.w3_contract_handle.functions.getOverBettingPayoutModifier().call(),
+            "under_betting_payout_modifier": self.w3_contract_handle.functions.getUnderBettingPayoutModifier().call(),
+            "over_betters_addresses": self.w3_contract_handle.functions.getOverBettersAddresses().call(),
+            "under_betters_addresses": self.w3_contract_handle.functions.getUnderBettersAddresses().call(),
+            "is_event_over": self.w3_contract_handle.functions.isEventOver().call()
         }
 
         return contract_info

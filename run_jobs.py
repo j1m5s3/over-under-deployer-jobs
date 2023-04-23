@@ -38,15 +38,23 @@ def event_deploy_worker():
     job_configs = [
         {
             "job_type": "betting_event_6h",
-            "params": {"BTC": {"collection_name": "event_contracts_6h"},
-                       "ETH": {"collection_name": "event_contracts_6h"}
-                       }
+            "params": {
+                "BTC": {"collection_name": "event_contracts_6h"},
+                "ETH": {"collection_name": "event_contracts_6h"}
+            }
+        },
+        {
+            "job_type": "betting_event_test",
+            "params": {
+                "BTC": {"collection_name": "event_contracts_test"},
+                "ETH": {"collection_name": "event_contracts_test"}
+            }
         }
     ]
-
+    is_test = True
     EventDeployerJobs(job_configs=job_configs,
                       provider_handler=provider,
-                      mongo_handler=mongo_handler).job_runner()
+                      mongo_handler=mongo_handler).job_runner(is_test=is_test)
 
     return
 
