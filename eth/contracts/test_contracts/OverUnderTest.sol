@@ -153,7 +153,7 @@ contract OverUnderTest {
 
     function setPriceAtClose(uint256 _price) public restricted {
         require(block.timestamp > eventClose);
-        priceAtClose = _price * 1 ether;
+        priceAtClose = _price;
     }
 
     // Check if user in pool
