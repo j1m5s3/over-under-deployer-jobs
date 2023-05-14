@@ -9,6 +9,7 @@ class ContractInfoModel(BaseModel):
     price_mark: Optional[float] = Field(..., description="Price mark of the contract")
     asset_symbol: Optional[str] = Field(..., description="Symbol of the asset")
     betting_close: Optional[int] = Field(..., description="Timestamp of the betting close")
+    payout_close: Optional[int] = Field(..., description="Timestamp of the payout close")
     event_close: Optional[int] = Field(..., description="Timestamp of the event close")
     contract_balance: Optional[float] = Field(..., description="Balance of the contract")
     over_betters_balance: Optional[float] = Field(..., description="Balance of the over betters")
@@ -18,4 +19,5 @@ class ContractInfoModel(BaseModel):
     over_betters_addresses: Optional[List] = Field(..., description="List of addresses of over betters")
     under_betters_addresses: Optional[List] = Field(..., description="List of addresses of under betters")
     is_event_over: Optional[bool] = Field(..., description="Is the event over?")
+    is_payout_period_over: Optional[bool] = Field(..., description="Is the payout over?")
 

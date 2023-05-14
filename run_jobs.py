@@ -51,7 +51,12 @@ def event_deploy_worker():
             }
         }
     ]
-    is_test = True
+
+    if config['is_test'].lower() == "true":
+        is_test = True
+    else:
+        is_test = False
+
     EventDeployerJobs(job_configs=job_configs,
                       provider_handler=provider,
                       mongo_handler=mongo_handler).job_runner(is_test=is_test)

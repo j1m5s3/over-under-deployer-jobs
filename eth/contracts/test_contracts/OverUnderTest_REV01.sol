@@ -4,14 +4,14 @@ pragma solidity ^0.8.18;
 contract OverUnderTest {
     string public constant NAME = "OverUnderTest";
     // Duration the event will staty active after BETTING_PERIOD ends
-    uint256 private constant EVENT_DURATION = 5 minutes;
+    uint256 private constant EVENT_DURATION = 2 minutes;
     // Duration the event will allow betting after contract deployment
-    uint256 private constant BETTING_PERIOD = 10 minutes;
+    uint256 private constant BETTING_PERIOD = 5 minutes;
     // Duration before payouts are automatically sent to winners
     uint256 private constant PAYOUT_PERIOD = 0 hours;
-    // Min bet value currently at 0.001 ether
+    // Min bet value currently at 0.001
     uint256 public constant MIN_BET_AMOUNT = 1000000000000000;
-    // Betting fee currently at 0.0001 ether
+    // Betting fee currently at 0.001 ether
     uint256 public constant BETTING_FEE = 100000000000000;
     // BETTING FEE + MIN_BET_AMOUNT
     uint256 public constant BET_PLUS_FEE = MIN_BET_AMOUNT + BETTING_FEE;
@@ -98,11 +98,6 @@ contract OverUnderTest {
         return eventClose;
     }
 
-    // Get payout period end time
-    function getPayoutClose() public view returns (uint256) {
-        return payoutClose;
-    }
-
     // Get under betting payout modifier value
     function getUnderBettingPayoutModifier() public view returns (uint256) {
         return underBettingPayoutModifier;
@@ -166,14 +161,6 @@ contract OverUnderTest {
         }
     }
 
-    function isPayoutPeriodOver() public view returns (bool) {
-        if(block.timestamp > payoutClose) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     function setPriceAtClose(uint256 _price) public restricted {
         require(block.timestamp > eventClose);
         priceAtClose = _price;
@@ -208,8 +195,8 @@ contract OverUnderTest {
 
         uint256 betValue;
         bool userInPool;
-        uint256 fractionOfTotalBetPool;
-
+        uint256 toCalculateOverModifier;
+        uint256 toCalculateUnderModifier;
 
         // players must make a min bet of 0.001 ETH + 0.0001 ETH fee
         require(
@@ -231,23 +218,17 @@ contract OverUnderTest {
         // map under bet to address
         underBets[msg.sender].betBalance += betValue;
         // the value of the bet is multiplied by the value of the payout modifier at the time of bet
-        underBets[msg.sender].withdrawBalance += betValue;//(betValue * underBettingPayoutModifier);
+        underBets[msg.sender].withdrawBalance += (betValue * underBettingPayoutModifier);
         // add fee to fee pool balance
         feePoolBalance += BETTING_FEE;
         // calculate payout modifier for under bet payouts
-        fractionOfTotalBetPool = underBettersBalance / (overBettersBalance + underBettersBalance);
-        underBettingPayoutModifier = payoutModifierCeiling - fractionOfTotalBetPool;
-        if (underBettingPayoutModifier < 1500000000000000000) {
-            underBettingPayoutModifier = 1500000000000000000;
-        }
+        toCalculateUnderModifier = 1 / ((overBettersBalance + underBettersBalance + feePoolBalance) / underBettersBalance);
+        underBettingPayoutModifier = payoutModifierCeiling - toCalculateUnderModifier;
 
         if (overBettersBalance > 0) {
             // calculate payout modifier for over bet payouts
-            fractionOfTotalBetPool = overBettersBalance / (overBettersBalance + underBettersBalance);
-            overBettingPayoutModifier = payoutModifierCeiling - fractionOfTotalBetPool;
-            if (overBettingPayoutModifier < 1500000000000000000){
-                overBettingPayoutModifier = 1500000000000000000;
-            }
+            toCalculateOverModifier = 1 / ((overBettersBalance + underBettersBalance + feePoolBalance) / overBettersBalance);
+            overBettingPayoutModifier = payoutModifierCeiling - toCalculateOverModifier;
         }
     }
 
@@ -257,7 +238,8 @@ contract OverUnderTest {
 
         uint256 betValue;
         bool userInPool;
-        uint256 fractionOfTotalBetPool;
+        uint256 toCalculateOverModifier;
+        uint256 toCalculateUnderModifier;
 
         // players must make a min bet of 0.001 ETH + 0.0001 ETH fee
         require(
@@ -278,23 +260,17 @@ contract OverUnderTest {
         // map over bet to address
         overBets[msg.sender].betBalance += betValue;
         // the value of the bet is multiplied by the value of the payout modifier at the time of bet
-        overBets[msg.sender].withdrawBalance += betValue;//(betValue * overBettingPayoutModifier);
+        overBets[msg.sender].withdrawBalance += (betValue * overBettingPayoutModifier);
         // add fee to fee pool balance
         feePoolBalance += BETTING_FEE;
         // calculate payout modifier for over bet payouts
-        fractionOfTotalBetPool = overBettersBalance / (overBettersBalance + underBettersBalance);
-        overBettingPayoutModifier = payoutModifierCeiling - (2 * fractionOfTotalBetPool);
-        if (overBettingPayoutModifier < 1500000000000000000){
-            overBettingPayoutModifier = 1500000000000000000;
-        }
+        toCalculateOverModifier = 1 / ((overBettersBalance + underBettersBalance + feePoolBalance) / overBettersBalance);
+        overBettingPayoutModifier = payoutModifierCeiling - toCalculateOverModifier;
 
         if(underBettersBalance > 0) {
             // calculate payout modifier for under bet payouts
-            fractionOfTotalBetPool = underBettersBalance / (overBettersBalance + underBettersBalance);
-            underBettingPayoutModifier = payoutModifierCeiling - fractionOfTotalBetPool;
-            if (underBettingPayoutModifier < 1500000000000000000) {
-                underBettingPayoutModifier = 1500000000000000000;
-            }
+            toCalculateUnderModifier = 1 / ((overBettersBalance + underBettersBalance + feePoolBalance) / underBettersBalance);
+            underBettingPayoutModifier = 2 - toCalculateUnderModifier;
         }
 
     }
@@ -318,19 +294,15 @@ contract OverUnderTest {
 
     // Function to be called by winning betters.
     // Will block any betters that are not in winningBetters array
-    function winnerWithdrawFunds() public {
+    function winnerWithdrawFunds() public payable withdrawRestriction(winningBetters) {
 
         if (priceAtClose > priceMark) {
-            require(overBets[msg.sender].payoutComplete == false,
-            "You have already withdrawn your winnings");
-
+            require(overBets[msg.sender].payoutComplete == false);
             payable(msg.sender).transfer(overBets[msg.sender].withdrawBalance);
             overBets[msg.sender].payoutComplete = true;
         }
-        else if (priceAtClose < priceMark) {
-            require(underBets[msg.sender].payoutComplete == false,
-            "You have already withdrawn your winnings");
-
+        if (priceAtClose < priceMark) {
+            require(underBets[msg.sender].payoutComplete == false);
             payable(msg.sender).transfer(underBets[msg.sender].withdrawBalance);
             underBets[msg.sender].payoutComplete = true;
         }
@@ -378,7 +350,7 @@ contract OverUnderTest {
                 break;
             }
         }
-        require(allowed, "Access denied, address not amongst winning betters");
+        require(allowed, "Access denied");
         _;
     }
 

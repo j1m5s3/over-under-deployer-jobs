@@ -124,7 +124,6 @@ class EventContractInterface:
             raise Exception("Contract not found")
 
     def get_event_contract_info(self) -> Optional[Dict]:
-
         contract_info = {
             "contract_name": self.w3_contract_handle.functions.getContractName().call(),
             "contract_address": self.w3_contract_handle.address,
@@ -133,18 +132,21 @@ class EventContractInterface:
             "asset_symbol": self.w3_contract_handle.functions.getAssetSymbol().call(),
             "betting_close": self.w3_contract_handle.functions.getBettingClose().call(),
             "event_close": self.w3_contract_handle.functions.getEventClose().call(),
+            "payout_close": self.w3_contract_handle.functions.getPayoutClose().call(),
 
             "contract_balance": Web3.from_wei(self.w3_contract_handle.functions.getContractBalance().call(),
-                                                  'ether'),
+                                              'ether'),
             "over_betters_balance": Web3.from_wei(self.w3_contract_handle.functions.getOverBettersBalance().call(),
-                                                      'ether'),
+                                                  'ether'),
             "under_betters_balance": Web3.from_wei(
                 self.w3_contract_handle.functions.getUnderBettersBalance().call(), 'ether'),
             "over_betting_payout_modifier": self.w3_contract_handle.functions.getOverBettingPayoutModifier().call(),
             "under_betting_payout_modifier": self.w3_contract_handle.functions.getUnderBettingPayoutModifier().call(),
             "over_betters_addresses": self.w3_contract_handle.functions.getOverBettersAddresses().call(),
             "under_betters_addresses": self.w3_contract_handle.functions.getUnderBettersAddresses().call(),
-            "is_event_over": self.w3_contract_handle.functions.isEventOver().call()
+            "is_event_over": self.w3_contract_handle.functions.isEventOver().call(),
+            "is_payout_period_over": self.w3_contract_handle.functions.isPayoutPeriodOver().call()
+
         }
 
         return contract_info
